@@ -9,18 +9,6 @@ services:
       - voltguard-network
     command: ["npm", "run", "dev"]
 
-  # backend:
-  #   build:
-  #     context: ./backend
-  #     dockerfile: Dockerfile
-  #   ports:
-  #     - "8000:8000"
-  #   networks:
-  #     - voltguard-network
-  #   devices:
-  #     - /dev/video0:/dev/video0  # Pass webcam to container
-  #   privileged: true  # Required for camera access on some systems
-
   postgres:
     image: postgres:17
     environment:
@@ -41,3 +29,4 @@ networks:
 
 volumes:
   pgdata:
+  redisdata:
