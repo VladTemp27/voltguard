@@ -4,7 +4,6 @@ import { io } from "socket.io-client";
 export default function VideoFeed() {
   const imgRef = useRef();
   const socketRef = useRef();
-  const [stats, setStats] = useState({ lights_on: 0, lights_off: 0 });
   const [isConnected, setIsConnected] = useState(false);
 
   useEffect(() => {
@@ -28,7 +27,6 @@ export default function VideoFeed() {
       if (imgRef.current) {
         imgRef.current.src = `data:image/jpeg;base64,${data.image}`;
       }
-      setStats(data.stats);
       // Request next frame
       requestFrame();
     });
@@ -75,28 +73,6 @@ export default function VideoFeed() {
           }}
         >
           {isConnected ? "● Connected" : "○ Disconnected"}
-        </div>
-        <div
-          style={{
-            padding: "10px 20px",
-            backgroundColor: "#4CAF50",
-            color: "white",
-            borderRadius: "5px",
-            fontWeight: "bold",
-          }}
-        >
-          Lights ON: {stats.lights_on}
-        </div>
-        <div
-          style={{
-            padding: "10px 20px",
-            backgroundColor: "#f44336",
-            color: "white",
-            borderRadius: "5px",
-            fontWeight: "bold",
-          }}
-        >
-          Lights OFF: {stats.lights_off}
         </div>
       </div>
 
