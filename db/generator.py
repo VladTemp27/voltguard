@@ -3,14 +3,18 @@ import random
 from faker import Faker
 from datetime import datetime, timedelta
 import uuid
+import os
+import dotenv
+
+dotenv.load_dotenv()
 
 # --- CONFIGURATION ---
 DB_CONFIG = {
-    "dbname": "mydatabase",
-    "user": "postgres",
-    "password": "lou",
-    "host": "127.0.0.1",
-    "port": "5432"
+    "dbname": os.getenv("PG_DATABASE", "mydatabase"),
+    "user": os.getenv("PG_USER", "postgres"),
+    "password": os.getenv("PG_PASSWORD", "lou"),
+    "host": "localhost",
+    "port": os.getenv("PG_PORT", "5432")
 }
 
 # PHP per kWh (Average electricity rate in Philippines)
