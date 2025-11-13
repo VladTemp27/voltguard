@@ -6,15 +6,15 @@ from datetime import datetime, timezone
 import energy_logger as logger  # direct import ✅
 
 # --- Initialize model and globals ---
-model = YOLO("weights.pt")
+model = YOLO("best.pt")
 camera = None
 
 POWER_RATINGS = {"laptop": 0.05, "lamp": 0.01, "screen": 0.1}
 HUMAN_ABSENT_THRESHOLD = 20  # seconds
 
 device_log = {}
-human_last_seen = time.time()
-human_present = True
+human_last_seen = 0
+human_present = False
 active_waste_events = {}
 
 
@@ -85,12 +85,27 @@ def get_frame():
     if "person" in detected_classes:
         human_present = True
         human_last_seen = time.time()
+        cv2.putText(frame, f"Human: Present",
+                    (10, 30), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 255, 0), 2)
     else:
-        if time.time() - human_last_seen > HUMAN_ABSENT_THRESHOLD:
+        # If human_last_seen is None (never seen), treat as absent immediately
+        if human_last_seen == 0:
             human_present = False
+            elapsed_absence = float('inf')
         else:
-            human_present = True
-    
+            elapsed_absence = time.time() - human_last_seen
+            human_present = elapsed_absence <= HUMAN_ABSENT_THRESHOLD
+
+        remaining = int(max(HUMAN_ABSENT_THRESHOLD - elapsed_absence, 0))
+
+        if human_present:
+            cv2.putText(frame, f"Inactivity Countdown: {remaining}s",
+                        (10, 30), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 0, 255), 2)
+        else:
+            cv2.putText(frame, f"Human: Absent",
+                        (10, 30), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 0, 255), 2)
+
+
 
     # --- Energy Waste Detection ---
     for device, record in device_log.items():
@@ -111,10 +126,7 @@ def get_frame():
 
         logger.save_all_once()
 
-    # --- Display Human Info ---
-    cv2.putText(frame, f"Human: {'Present' if human_present else 'Absent'}",
-                (10, 30), cv2.FONT_HERSHEY_SIMPLEX, 0.7,
-                (0, 255, 0) if human_present else (0, 0, 255), 2)
+
 
     return frame
 
