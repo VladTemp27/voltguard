@@ -1,0 +1,85 @@
+@import 'tailwindcss/base';
+@import 'tailwindcss/components';
+@import 'tailwindcss/utilities';
+
+:root {
+  /* VoltGuard Color Palette: Blue #245C94, Orange #FE8D00, Off-White #FFFFFF */
+  --background: 0 0% 100%;
+  --foreground: 207 60% 36%;
+  --card: 0 0% 100%;
+  --card-foreground: 207 60% 36%;
+  --popover: 0 0% 100%;
+  --popover-foreground: 207 60% 36%;
+  --primary: 207 60% 36%;
+  --primary-foreground: 0 0% 100%;
+  --secondary: 32 100% 50%;
+  --secondary-foreground: 0 0% 100%;
+  --muted: 0 0% 96%;
+  --muted-foreground: 0 0% 55%;
+  --accent: 32 100% 50%;
+  --accent-foreground: 0 0% 100%;
+  --destructive: 0 84% 60%;
+  --destructive-foreground: 0 0% 100%;
+  --border: 0 0% 90%;
+  --input: 0 0% 96%;
+  --ring: 207 60% 36%;
+  --chart-1: 207 60% 36%;
+  --chart-2: 32 100% 50%;
+  --chart-3: 0 0% 55%;
+  --chart-4: 214 76% 59%;
+  --chart-5: 36 100% 65%;
+  --radius: 0.625rem;
+  --sidebar-background: 207 60% 36%;
+  --sidebar-foreground: 0 0% 100%;
+  --sidebar-primary: 32 100% 50%;
+  --sidebar-primary-foreground: 207 60% 36%;
+  --sidebar-accent: 32 100% 50%;
+  --sidebar-accent-foreground: 207 60% 36%;
+  --sidebar-border: 207 60% 25%;
+  --sidebar-ring: 32 100% 50%;
+}
+
+.dark {
+  --background: 0 0% 10%;
+  --foreground: 0 0% 100%;
+  --card: 0 0% 16%;
+  --card-foreground: 0 0% 100%;
+  --popover: 0 0% 16%;
+  --popover-foreground: 0 0% 100%;
+  --primary: 214 76% 59%;
+  --primary-foreground: 0 0% 100%;
+  --secondary: 32 100% 50%;
+  --secondary-foreground: 0 0% 100%;
+  --muted: 0 0% 23%;
+  --muted-foreground: 0 0% 69%;
+  --accent: 36 100% 65%;
+  --accent-foreground: 0 0% 10%;
+  --destructive: 0 84% 60%;
+  --destructive-foreground: 0 0% 100%;
+  --border: 0 0% 23%;
+  --input: 0 0% 16%;
+  --ring: 214 76% 59%;
+  --chart-1: 214 76% 59%;
+  --chart-2: 36 100% 65%;
+  --chart-3: 0 0% 69%;
+  --chart-4: 214 76% 70%;
+  --chart-5: 36 100% 75%;
+  --sidebar-background: 207 60% 25%;
+  --sidebar-foreground: 0 0% 100%;
+  --sidebar-primary: 32 100% 50%;
+  --sidebar-primary-foreground: 0 0% 100%;
+  --sidebar-accent: 36 100% 65%;
+  --sidebar-accent-foreground: 0 0% 10%;
+  --sidebar-border: 207 60% 30%;
+  --sidebar-ring: 32 100% 50%;
+}
+
+@layer base {
+  * {
+    @apply border-[hsl(var(--border))];
+  }
+  body {
+    @apply bg-background text-foreground;
+    font-feature-settings: 'rlig' 1, 'calt' 1;
+  }
+}
