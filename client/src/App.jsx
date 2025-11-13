@@ -10,8 +10,7 @@ import NotificationListener from './components/NotificationListener'
 
 function App() {
   return (
-    <Router element={<NotificationListener></NotificationListener>}>
-      <NotificationListener />
+    <Router>
       <Routes>
         <Route path="/" element={<Navigate to="/dashboard" replace />} />
         <Route path="/dashboard" element={<Dashboard />} />
