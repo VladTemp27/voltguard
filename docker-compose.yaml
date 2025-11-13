@@ -52,6 +52,27 @@ services:
     environment:
       - RITRUSTEDORIGINS=http://localhost:8001
 
+  ollama:
+    image: ollama/ollama:latest
+    ports:
+      - "11434:11434"
+    volumes:
+      - ollama:/root/.ollama
+    networks:
+      - voltguard-network
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:11434/"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    entrypoint: ["/bin/sh", "-c"]
+    command:
+      - |
+        ollama serve &
+        sleep 5
+        ollama pull llama3.2
+        wait
+
 networks:
   voltguard-network:
     driver: bridge
@@ -60,3 +81,4 @@ volumes:
   pgdata:
   redisdata:
   redisinsight:
+  ollama:

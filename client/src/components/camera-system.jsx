@@ -39,7 +39,6 @@ export function CameraSystem() {
             </div>
           </div>
 
-
           {/* Available Cameras */}
           <div>
             <p className="text-xs font-semibold text-gray-600 mb-2">Available Cameras</p>

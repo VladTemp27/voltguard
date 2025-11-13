@@ -1,11 +1,16 @@
-import { useState } from "react"
+import { useState, useEffect, useRef } from "react"
 import { X } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Card } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
+import { io } from "socket.io-client"
 
 export function CameraSystemModal({ onClose }) {
   const [selectedCamera, setSelectedCamera] = useState("camera-1")
+  const imgRef = useRef()
+  const socketRef = useRef()
+  const [isConnected, setIsConnected] = useState(false)
+  const [hasFrame, setHasFrame] = useState(false)
 
   const cameras = [
     { id: "camera-1", name: "Living Room", status: "active", resolution: "1080p" },
@@ -14,11 +19,53 @@ export function CameraSystemModal({ onClose }) {
     { id: "camera-4", name: "Garage", status: "active", resolution: "720p" },
   ]
 
+  useEffect(() => {
+    socketRef.current = io("http://localhost:8000", {
+      path: "/socket.io/",
+      transports: ["websocket", "polling"],
+    })
+
+    socketRef.current.on("connect", () => {
+      console.log("Connected to server")
+      setIsConnected(true)
+      requestFrame()
+    })
+
+    socketRef.current.on("disconnect", () => {
+      console.log("Disconnected from server")
+      setIsConnected(false)
+    })
+
+    socketRef.current.on("frame", (data) => {
+      if (imgRef.current) {
+        imgRef.current.src = `data:image/jpeg;base64,${data.image}`
+        setHasFrame(true)
+      }
+      requestFrame()
+    })
+
+    socketRef.current.on("error", (error) => {
+      console.error("Frame error:", error)
+      setTimeout(requestFrame, 1000)
+    })
+
+    return () => {
+      if (socketRef.current) {
+        socketRef.current.disconnect()
+      }
+    }
+  }, [])
+
+  const requestFrame = () => {
+    if (socketRef.current && socketRef.current.connected) {
+      socketRef.current.emit("get_frame", {})
+    }
+  }
 
   const topAppliance = {
     name: "Air Conditioner",
     hoursOn: 8.5,
-    wattage: 3500,
+    wattage: 4500,
   }
 
   return (
@@ -35,22 +82,36 @@ export function CameraSystemModal({ onClose }) {
         <div className="p-6 space-y-6 overflow-y-auto flex-1 scrollbar-hide">
           {/* Live Feed Section */}
           <div>
-            <p className="text-sm font-semibold text-foreground mb-3">Live Feed</p>
-            <div className="bg-gray-900 rounded-2xl aspect-video flex items-center justify-center relative overflow-hidden">
-              <div className="absolute inset-0 bg-gradient-to-br from-primary/20 to-secondary/20"></div>
-              <div className="relative z-10 text-center">
-                <div className="w-16 h-16 mx-auto mb-3 rounded-full bg-primary/20 flex items-center justify-center">
-                  <svg className="w-8 h-8 text-primary" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                      strokeWidth={2}
-                      d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z"
-                    />
-                  </svg>
+            <div className="flex gap-2 mb-3 flex-wrap">
+              <Badge variant={isConnected ? "default" : "secondary"} className="text-xs">
+                {isConnected ? "● Connected" : "○ Disconnected"}
+              </Badge>
+            </div>
+            <div className="bg-gray-900 rounded-2xl aspect-video relative overflow-hidden">
+              {!hasFrame && (
+                <div className="absolute inset-0 flex items-center justify-center">
+                  <div className="text-center">
+                    <div className="w-16 h-16 mx-auto mb-3 rounded-full bg-primary/20 flex items-center justify-center">
+                      <svg className="w-8 h-8 text-primary" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                          strokeWidth={2}
+                          d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z"
+                        />
+                      </svg>
+                    </div>
+                    <p className="text-sm text-gray-400">
+                      {isConnected ? "Loading feed..." : "Connecting to live feed..."}
+                    </p>
+                  </div>
                 </div>
-                <p className="text-sm text-gray-400">Live Feed</p>
-              </div>
+              )}
+              <img
+                ref={imgRef}
+                alt="Live Video Feed"
+                className={`w-full h-full object-contain ${hasFrame ? 'block' : 'hidden'}`}
+              />
             </div>
           </div>
 

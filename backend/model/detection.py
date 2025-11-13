@@ -2,11 +2,16 @@ import cv2
 from ultralytics import YOLO
 import numpy as np
 import time
+import os
 from datetime import datetime, timezone
-import energy_logger as logger  # direct import ✅
+from . import energy_logger as logger  # direct import ✅
 
 # --- Initialize model and globals ---
-model = YOLO("best_max.pt")
+# Get the absolute path to the model file
+MODEL_DIR = os.path.dirname(os.path.abspath(__file__))
+MODEL_PATH = os.path.join(MODEL_DIR, "best.pt")
+
+model = YOLO(MODEL_PATH)
 camera = None
 
 POWER_RATINGS = {"laptop": 0.05, "lamp": 0.01, "screen": 0.1}

@@ -25,7 +25,7 @@ export const useEnergyClient = () => {
         // 1. Point to your Python Server's SSE endpoint
         // NOTE: matches the URL you successfully visited in the browser
         const transport = new SSEClientTransport(
-          new URL("http://localhost:8000/mcp/sse")
+          new URL("http://localhost:8000/lou/mcp/sse")
         );
 
         // 2. Initialize Client
