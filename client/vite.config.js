@@ -16,10 +16,8 @@ export default defineConfig({
           changeOrigin: true,
           secure: false,
         }
-      }
-    }
-  server: {
-    host: '0.0.0.0',  // Allow external connections
+      },
+          host: '0.0.0.0',  // Allow external connections
     port: 5173,
     strictPort: true,
     watch: {
