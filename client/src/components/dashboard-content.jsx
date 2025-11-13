@@ -1,6 +1,62 @@
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
+import { useState, useEffect } from "react"
 
-export function DashboardContent({ setActiveModal, activeModal }) {
+export function DashboardContent({ setActiveModal, activeModal, notifications = [] }) {
+  const [alertLogs, setAlertLogs] = useState([
+    {
+      id: "default_1",
+      message: "High Usage Detected",
+      device: "Camera 3",
+      time: "2:45 PM",
+      level: "error"
+    },
+    {
+      id: "default_2",
+      message: "Device Offline",
+      device: "Camera 5",
+      time: "1:30 PM",
+      level: "warning"
+    }
+  ]);
+
+  // Update alert logs when new notifications arrive
+  useEffect(() => {
+    if (notifications.length > 0) {
+      const latestNotification = notifications[0];
+      const newLog = {
+        id: latestNotification.id,
+        message: latestNotification.message,
+        device: latestNotification.device || "System",
+        time: new Date(latestNotification.timestamp).toLocaleTimeString('en-US', { 
+          hour: 'numeric', 
+          minute: '2-digit',
+          hour12: true 
+        }),
+        level: latestNotification.level || "info"
+      };
+      
+      // Only add if not already in logs (prevent duplicates)
+      setAlertLogs(prev => {
+        const exists = prev.some(log => log.id === newLog.id);
+        if (exists) return prev;
+        return [newLog, ...prev].slice(0, 10); // Keep only last 10
+      });
+    }
+  }, [notifications]);
+
+  const getLevelColor = (level) => {
+    switch (level) {
+      case "error":
+        return { bg: "bg-destructive/10", border: "border-destructive/50", text: "text-destructive" };
+      case "warning":
+        return { bg: "bg-yellow-500/10", border: "border-yellow-500/50", text: "text-yellow-600" };
+      case "info":
+        return { bg: "bg-blue-500/10", border: "border-blue-500/50", text: "text-blue-500" };
+      default:
+        return { bg: "bg-gray-100", border: "border-gray-300", text: "text-gray-600" };
+    }
+  };
+
   return (
     <div 
       className={`bg-white rounded-3xl shadow-2xl border-8 border-gray-200 overflow-hidden transition-all duration-300 ${activeModal ? 'blur-sm' : ''}`} 
@@ -50,22 +106,28 @@ export function DashboardContent({ setActiveModal, activeModal }) {
           </button>
         </div>
 
-        {/* Alerts Card */}
+        {/* Alerts Card - Now with live notifications */}
         <button onClick={() => setActiveModal("alerts")} className="w-full text-left focus:outline-none">
           <Card className="border border-white/20 hover:shadow-2xl transition-all cursor-pointer bg-white/40 backdrop-blur-md shadow-lg gap-3">
-            <CardHeader className="pb-0">
+            <CardHeader className="pb-0 flex flex-row items-center justify-between">
               <CardTitle className="text-lg text-primary">Alert Pings (Logs)</CardTitle>
+              {notifications.length > 0 && (
+                <span className="bg-red-500 text-white text-xs font-bold px-2 py-1 rounded-full animate-pulse">
+                  {notifications.length}
+                </span>
+              )}
             </CardHeader>
-            <CardContent className="space-y-3">
-              <div className="bg-destructive/10 border-2 border-destructive/50 p-3 rounded-lg">
-                <p className="text-base font-semibold text-destructive">High Usage Detected</p>
-                <p className="text-base text-gray-600 mt-1">Camera 3 • 2:45 PM</p>
-              </div>
-              <div className="bg-blue-500/10 border-2 border-blue-500/50 p-3 rounded-lg">
-                <p className="text-base font-semibold text-blue-500">Device Offline</p>
-                <p className="text-base text-gray-600 mt-1">Camera 5 • 1:30 PM</p>
-              </div>
-              <div className="text-base text-secondary font-semibold">3 Active Alerts</div>
+            <CardContent className="space-y-3 max-h-64 overflow-y-auto">
+              {alertLogs.slice(0, 3).map((log) => {
+                const colors = getLevelColor(log.level);
+                return (
+                  <div key={log.id} className={`${colors.bg} border-2 ${colors.border} p-3 rounded-lg transition-all`}>
+                    <p className={`text-base font-semibold ${colors.text}`}>{log.message}</p>
+                    <p className="text-base text-gray-600 mt-1">{log.device} • {log.time}</p>
+                  </div>
+                );
+              })}
+              <div className="text-base text-secondary font-semibold">{alertLogs.length} Active Alerts</div>
             </CardContent>
           </Card>
         </button>

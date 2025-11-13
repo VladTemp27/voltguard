@@ -395,6 +395,36 @@ def get_notifications(limit: int = 50):
     except Exception as e:
         return {"error": str(e)}
 
+@app.post("/api/notifications/send")
+def send_notification(message: str, device: str = None, level: str = "info"):
+    """Send a new notification via Redis pub/sub"""
+    if not redis_client:
+        return {"error": "Redis not available"}
+    
+    try:
+        import time
+        from datetime import timezone
+        
+        notification = {
+            "id": f"notif_{int(time.time() * 1000)}_{device or 'manual'}",
+            "message": message,
+            "device": device,
+            "level": level,
+            "timestamp": datetime.now(timezone.utc).isoformat(),
+            "read": False
+        }
+        
+        # Store in Redis list
+        redis_client.lpush('voltguard:notifications', json.dumps(notification))
+        redis_client.ltrim('voltguard:notifications', 0, 99)  # Keep only last 100
+        
+        # Publish to pub/sub channel
+        redis_client.publish('voltguard:notifications:new', json.dumps(notification))
+        
+        return {"status": "sent", "notification": notification}
+    except Exception as e:
+        return {"error": str(e)}
+
 @app.delete("/api/notifications")
 def clear_notifications():
     """Clear all notifications from Redis"""

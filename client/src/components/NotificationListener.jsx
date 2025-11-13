@@ -1,9 +1,75 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, useRef } from "react";
 import { io } from "socket.io-client";
 
-export default function NotificationListener() {
+// iPhone-style notification banner component (styled like dashboard cards)
+function NotificationBanner({ notification, onClose }) {
+  useEffect(() => {
+    const timer = setTimeout(onClose, 5000); // Auto-dismiss after 5 seconds
+    return () => clearTimeout(timer);
+  }, [onClose]);
+
+  const levelColors = {
+    error: { 
+      bg: "bg-white/40",
+      border: "border-destructive/50",
+      text: "text-destructive",
+      iconBg: "bg-destructive/10"
+    },
+    warning: { 
+      bg: "bg-white/40",
+      border: "border-yellow-500/50",
+      text: "text-yellow-600",
+      iconBg: "bg-yellow-500/10"
+    },
+    info: { 
+      bg: "bg-white/40",
+      border: "border-blue-500/50",
+      text: "text-blue-500",
+      iconBg: "bg-blue-500/10"
+    },
+  };
+
+  const colors = levelColors[notification.level] || levelColors.info;
+
+  return (
+    <div
+      className={`fixed top-4 left-1/2 transform -translate-x-1/2 z-[9999] ${colors.bg} backdrop-blur-md rounded-2xl shadow-2xl border-2 ${colors.border} px-6 py-4 min-w-[320px] max-w-md animate-slide-down cursor-pointer hover:shadow-xl transition-all`}
+      onClick={onClose}
+      style={{
+        animation: "slideDown 0.3s ease-out",
+      }}
+    >
+      <div className="flex items-start gap-3">
+        <div className={`flex-shrink-0 ${colors.iconBg} p-2 rounded-lg`}>
+          <svg className={`w-6 h-6 ${colors.text}`} fill="currentColor" viewBox="0 0 20 20">
+            <path d="M10 2a6 6 0 00-6 6v3.586l-.707.707A1 1 0 004 14h12a1 1 0 00.707-1.707L16 11.586V8a6 6 0 00-6-6zM10 18a3 3 0 01-3-3h6a3 3 0 01-3 3z" />
+          </svg>
+        </div>
+        <div className="flex-1 min-w-0">
+          <p className={`font-bold text-sm ${colors.text}`}>VoltGuard Alert</p>
+          <p className="text-sm mt-1 line-clamp-2 text-gray-700">{notification.message}</p>
+          {notification.device && (
+            <p className="text-xs mt-1 text-gray-600">Device: {notification.device}</p>
+          )}
+        </div>
+        <button
+          onClick={(e) => { e.stopPropagation(); onClose(); }}
+          className="flex-shrink-0 hover:opacity-70 transition-opacity text-gray-500"
+        >
+          <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 20 20">
+            <path fillRule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clipRule="evenodd" />
+          </svg>
+        </button>
+      </div>
+    </div>
+  );
+}
+
+export default function NotificationListener({ onNewNotification }) {
   const [notifications, setNotifications] = useState([]);
+  const [bannerNotification, setBannerNotification] = useState(null);
   const socketRef = useRef();
+  const receivedNotificationIds = useRef(new Set()); // Track received notification IDs
 
   useEffect(() => {
     socketRef.current = io("http://localhost:8000", {
@@ -16,8 +82,25 @@ export default function NotificationListener() {
     });
 
     socketRef.current.on("notification", (notification) => {
+      // Prevent duplicate notifications
+      if (receivedNotificationIds.current.has(notification.id)) {
+        console.log("Duplicate notification ignored:", notification.id);
+        return;
+      }
+
       console.log("New notification:", notification);
+      receivedNotificationIds.current.add(notification.id);
+      
+      // Add to notifications list
       setNotifications((prev) => [notification, ...prev]);
+      
+      // Show iPhone-style banner
+      setBannerNotification(notification);
+      
+      // Trigger parent callback if provided
+      if (onNewNotification) {
+        onNewNotification(notification);
+      }
       
       // Show browser notification if permission granted
       if (Notification.permission === "granted") {
@@ -38,69 +121,32 @@ export default function NotificationListener() {
         socketRef.current.disconnect();
       }
     };
-  }, []);
-
-  const clearNotifications = () => {
-    setNotifications([]);
-  };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []); // Empty dependencies to prevent reconnection loop
 
   return (
-    <div style={{ 
-      position: "fixed", 
-      top: 20, 
-      right: 20, 
-      width: 320,
-      maxHeight: 400,
-      overflow: "auto",
-      backgroundColor: "white",
-      borderRadius: 8,
-      boxShadow: "0 4px 12px rgba(0,0,0,0.15)",
-      padding: 15,
-      zIndex: 1000
-    }}>
-      <div style={{ 
-        display: "flex", 
-        justifyContent: "space-between",
-        alignItems: "center",
-        marginBottom: 10
-      }}>
-        <h3 style={{ margin: 0 }}>Notifications ({notifications.length})</h3>
-        <button 
-          onClick={clearNotifications}
-          style={{
-            padding: "5px 10px",
-            fontSize: 12,
-            cursor: "pointer"
-          }}
-        >
-          Clear All
-        </button>
-      </div>
-      
-      {notifications.length === 0 ? (
-        <p style={{ color: "#999", textAlign: "center" }}>No notifications</p>
-      ) : (
-        notifications.map((notif) => (
-          <div
-            key={notif.id}
-            style={{
-              padding: 10,
-              marginBottom: 8,
-              backgroundColor: notif.level === "warning" ? "#fff3cd" : "#d1ecf1",
-              border: `1px solid ${notif.level === "warning" ? "#ffc107" : "#0dcaf0"}`,
-              borderRadius: 4,
-            }}
-          >
-            <div style={{ fontSize: 14, fontWeight: "bold", marginBottom: 4 }}>
-              {notif.device ? `Device: ${notif.device}` : "Alert"}
-            </div>
-            <div style={{ fontSize: 13 }}>{notif.message}</div>
-            <div style={{ fontSize: 11, color: "#666", marginTop: 4 }}>
-              {new Date(notif.timestamp).toLocaleString()}
-            </div>
-          </div>
-        ))
+    <>
+      {/* iPhone-style notification banner */}
+      {bannerNotification && (
+        <NotificationBanner
+          notification={bannerNotification}
+          onClose={() => setBannerNotification(null)}
+        />
       )}
-    </div>
+      
+      {/* Global CSS for animation */}
+      <style>{`
+        @keyframes slideDown {
+          from {
+            transform: translate(-50%, -100%);
+            opacity: 0;
+          }
+          to {
+            transform: translate(-50%, 0);
+            opacity: 1;
+          }
+        }
+      `}</style>
+    </>
   );
 }

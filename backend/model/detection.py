@@ -9,7 +9,7 @@ from . import energy_logger as logger  # direct import ✅
 # --- Initialize model and globals ---
 # Get the absolute path to the model file
 MODEL_DIR = os.path.dirname(os.path.abspath(__file__))
-MODEL_PATH = os.path.join(MODEL_DIR, "best.pt")
+MODEL_PATH = os.path.join(MODEL_DIR, "best_max.pt")
 
 model = YOLO(MODEL_PATH)
 camera = None

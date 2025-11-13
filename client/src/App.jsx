@@ -6,7 +6,6 @@ import Settings from './pages/Settings'
 import System from './pages/System'
 import './styles/globals.css'
 import VideoFeed from './components/video-feed'
-import NotificationListener from './components/NotificationListener'
 
 function App() {
   return (
