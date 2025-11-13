@@ -506,7 +506,14 @@ This project is licensed under the MIT License. See [LICENSE](LICENSE) for detai
 ## 👥 Team
 
 **VoltGuard Development Team**
-- Repository: [github.com/VladTemp27/voltguard](https://github.com/VladTemp27/voltguard)
+
+- **Luis, Marven Joffre**
+- **Agustin, Mark Lestat**
+- **Morados, Lou Diamong**
+- **Caparas, Maxine Van**
+- **Pelobello, Fernan Frans**
+
+Repository: [github.com/VladTemp27/voltguard](https://github.com/VladTemp27/voltguard)
 
 ---
 
