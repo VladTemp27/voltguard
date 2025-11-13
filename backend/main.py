@@ -18,10 +18,11 @@ import base64
 import redis
 import asyncio
 import os
+import cv2
 
 # Import video detection
 sys.path.insert(0, str(Path(__file__).parent.parent))
-from model.check import get_frame as get_video_frame, stats
+from model.detection import get_frame as get_video_frame
 
 # --- 1. DATABASE CONFIGURATION ---
 DB_CONFIG = {
@@ -345,22 +346,22 @@ async def disconnect(sid):
 
 @sio.event
 async def get_frame(sid, data):
-    frame_bytes, current_stats = get_video_frame()
+    frame = get_video_frame()
     
-    if frame_bytes:
-        frame_b64 = base64.b64encode(frame_bytes).decode('utf-8')
-        await sio.emit('frame', {
-            'image': frame_b64,
-            'stats': current_stats
-        }, room=sid)
+    if frame is not None:
+        # Encode frame to JPEG
+        success, buffer = cv2.imencode('.jpg', frame)
+        if success:
+            frame_b64 = base64.b64encode(buffer.tobytes()).decode('utf-8')
+            await sio.emit('frame', {
+                'image': frame_b64
+            }, room=sid)
+        else:
+            await sio.emit('error', {'message': 'Failed to encode frame'}, room=sid)
     else:
         await sio.emit('error', {'message': 'Failed to grab frame'}, room=sid)
 
-# --- 9. VIDEO API ENDPOINTS ---
-@app.get("/api/stats")
-def get_stats():
-    """Get current video detection stats"""
-    return stats
+# --- 9. FASTAPI ENDPOINTS ---
 
 @app.get("/api/video_feed")
 def video_feed():
@@ -369,10 +370,13 @@ def video_feed():
     
     def generate_frames():
         while True:
-            frame_bytes, current_stats = get_video_frame()
-            if frame_bytes:
-                yield (b'--frame\r\n'
-                       b'Content-Type: image/jpeg\r\n\r\n' + frame_bytes + b'\r\n')
+            frame = get_video_frame()
+            if frame is not None:
+                success, buffer = cv2.imencode('.jpg', frame)
+                if success:
+                    frame_bytes = buffer.tobytes()
+                    yield (b'--frame\r\n'
+                           b'Content-Type: image/jpeg\r\n\r\n' + frame_bytes + b'\r\n')
     
     return StreamingResponse(
         generate_frames(),
