@@ -3,17 +3,27 @@ import psycopg2
 from psycopg2.extras import RealDictCursor
 from mcp.server.fastmcp import FastMCP
 from datetime import date, datetime
+import sys
+from pathlib import Path
 
-# --- NEW IMPORTS FOR WEB SERVER ---
+# FastAPI and middleware
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 import uvicorn
 
-# --- 1. SERVER INITIALIZATION ---
-# We keep FastMCP, but we will attach it to FastAPI later
-mcp = FastMCP("EnergyDatabase")
+# Socket.IO
+import socketio
+import signal
+import base64
+import redis
+import asyncio
+import os
 
-# --- 2. DATABASE CONFIGURATION ---
+# Import video detection
+sys.path.insert(0, str(Path(__file__).parent.parent))
+from model.check import get_frame as get_video_frame, stats
+
+# --- 1. DATABASE CONFIGURATION ---
 DB_CONFIG = {
     "dbname": "mydatabase",
     "user": "postgres",
@@ -32,9 +42,10 @@ def json_serial(obj):
         return obj.isoformat()
     return str(obj)
 
-# --- 3. MCP TOOLS (The Interface) ---
-# These remain exactly the same as your original script
+# --- 2. MCP SERVER INITIALIZATION ---
+mcp = FastMCP("EnergyDatabase")
 
+# --- 3. MCP TOOLS ---
 @mcp.tool()
 def get_waste_summary_by_location(start_date: str, end_date: str) -> str:
     """
@@ -169,7 +180,7 @@ def get_devices_by_location(location_name: str) -> str:
         FROM waste_events we
         JOIN device_catalog dc ON we.device_id = dc.device_id
         JOIN locations l ON dc.location_id = l.location_id
-        WHERE l.name ILIKE %s  -- Case-insensitive match
+        WHERE l.name ILIKE %s
         GROUP BY dc.device_name, dc.avg_wattage_rating
         ORDER BY total_cost DESC
     """
@@ -254,33 +265,242 @@ def get_recent_logs(limit: int = 5) -> str:
                 return json.dumps([dict(r) for r in cur.fetchall()], default=json_serial, indent=2)
     except Exception as e:
         return f"Error: {str(e)}"
-    
 
-# --- 4. EXECUTION ---
+# --- 4. FASTAPI APP INITIALIZATION ---
+app = FastAPI(title="VoltGuard Unified Server")
 
-# Initialize the standard FastAPI app
-app = FastAPI(title="Energy MCP Server")
-
+# Add CORS middleware
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"], 
+    allow_origins=["*"],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
-# Use the correct method to create the ASGI app for SSE
-# Try 'sse_app()' first, if that fails, we use the manual mount approach
-try:
-    # This is the standard method for many FastMCP versions
-    sse_handler = mcp.sse_app()
-    app.mount("/mcp", sse_handler)
-except AttributeError:
-    # Fallback if your version uses a different name (common in newer SDKs)
-    print("⚠️ 'sse_app' method not found. Trying manual startup...", file=sys.stderr)
-    
+# --- 5. SOCKET.IO SETUP ---
+sio = socketio.AsyncServer(
+    async_mode='asgi',
+    cors_allowed_origins='*'
+)
 
+# Wrap with ASGI app
+socket_app = socketio.ASGIApp(sio, app)
+
+# --- 6. REDIS CONNECTION ---
+try:
+    redis_client = redis.Redis(
+        host=os.getenv('REDIS_HOST', 'localhost'),
+        port=int(os.getenv('REDIS_PORT', 6379)),
+        password=os.getenv('REDIS_PASSWORD', 'securepassword'),
+        decode_responses=True
+    )
+    redis_client.ping()
+    print("[REDIS] Connected successfully")
+except Exception as e:
+    print(f"[REDIS] Connection failed: {e}")
+    redis_client = None
+
+# --- 7. REDIS PUB/SUB LISTENER ---
+async def listen_for_notifications():
+    """Listen to Redis pub/sub for new notifications and broadcast to all connected clients"""
+    if not redis_client:
+        return
+    
+    pubsub = redis_client.pubsub()
+    pubsub.subscribe('voltguard:notifications:new')
+    
+    print("[REDIS] Listening for notifications...")
+    
+    while True:
+        try:
+            message = pubsub.get_message(ignore_subscribe_messages=True, timeout=0.1)
+            if message and message['type'] == 'message':
+                notification = json.loads(message['data'])
+                await sio.emit('notification', notification)
+                print(f"[BROADCAST] Notification sent to all clients: {notification['message']}")
+            await asyncio.sleep(0.1)
+        except Exception as e:
+            print(f"[ERROR] Redis listener error: {e}")
+            await asyncio.sleep(1)
+
+# --- 8. SOCKET.IO EVENTS ---
+@sio.event
+async def connect(sid, environ):
+    print(f"Client connected: {sid}")
+    
+    # Send existing notifications to newly connected client
+    if redis_client:
+        try:
+            notifications = redis_client.lrange('voltguard:notifications', 0, 49)
+            for notif_str in reversed(notifications):
+                notification = json.loads(notif_str)
+                await sio.emit('notification', notification, room=sid)
+        except Exception as e:
+            print(f"[ERROR] Failed to send existing notifications: {e}")
+
+@sio.event
+async def disconnect(sid):
+    print(f"Client disconnected: {sid}")
+
+@sio.event
+async def get_frame(sid, data):
+    frame_bytes, current_stats = get_video_frame()
+    
+    if frame_bytes:
+        frame_b64 = base64.b64encode(frame_bytes).decode('utf-8')
+        await sio.emit('frame', {
+            'image': frame_b64,
+            'stats': current_stats
+        }, room=sid)
+    else:
+        await sio.emit('error', {'message': 'Failed to grab frame'}, room=sid)
+
+# --- 9. VIDEO API ENDPOINTS ---
+@app.get("/api/stats")
+def get_stats():
+    """Get current video detection stats"""
+    return stats
+
+@app.get("/api/video_feed")
+def video_feed():
+    """HTTP video stream endpoint (multipart/x-mixed-replace)"""
+    from fastapi.responses import StreamingResponse
+    
+    def generate_frames():
+        while True:
+            frame_bytes, current_stats = get_video_frame()
+            if frame_bytes:
+                yield (b'--frame\r\n'
+                       b'Content-Type: image/jpeg\r\n\r\n' + frame_bytes + b'\r\n')
+    
+    return StreamingResponse(
+        generate_frames(),
+        media_type="multipart/x-mixed-replace; boundary=frame"
+    )
+
+@app.get("/api/notifications")
+def get_notifications(limit: int = 50):
+    """Get recent notifications from Redis"""
+    if not redis_client:
+        return {"error": "Redis not available"}
+    
+    try:
+        notifications = redis_client.lrange('voltguard:notifications', 0, limit - 1)
+        return [json.loads(n) for n in notifications]
+    except Exception as e:
+        return {"error": str(e)}
+
+@app.delete("/api/notifications")
+def clear_notifications():
+    """Clear all notifications from Redis"""
+    if not redis_client:
+        return {"error": "Redis not available"}
+    
+    try:
+        redis_client.delete('voltguard:notifications')
+        return {"status": "notifications cleared"}
+    except Exception as e:
+        return {"error": str(e)}
+
+# --- 10. MCP ENDPOINT ---
+# Mount MCP before wrapping with Socket.IO
+try:
+    sse_handler = mcp.sse_app()
+    app.mount("/lou/mcp", sse_handler)
+    print("[MCP] Mounted at /lou/mcp/sse")
+except AttributeError as e:
+    print(f"⚠️ 'sse_app' method not found in FastMCP: {e}", file=sys.stderr)
+except Exception as e:
+    print(f"⚠️ Failed to mount MCP: {e}", file=sys.stderr)
+
+# --- 11. STARTUP & SHUTDOWN EVENTS ---
+@app.on_event("startup")
+async def startup_event():
+    """Initialize services on startup"""
+    if redis_client:
+        # Add dummy notifications for testing (only if Redis is empty)
+        try:
+            existing_count = redis_client.llen('voltguard:notifications')
+            
+            if existing_count == 0:
+                import time
+                from datetime import timezone
+                
+                dummy_notifications = [
+                    {
+                        "id": f"notif_{int(time.time() * 1000)}_1",
+                        "message": "Laptop left ON — tracking waste duration.",
+                        "device": "laptop",
+                        "level": "warning",
+                        "timestamp": datetime.now(timezone.utc).isoformat(),
+                        "read": False
+                    },
+                    {
+                        "id": f"notif_{int(time.time() * 1000)}_2",
+                        "message": "TV detected running for extended period",
+                        "device": "tv",
+                        "level": "warning",
+                        "timestamp": datetime.now(timezone.utc).isoformat(),
+                        "read": False
+                    },
+                    {
+                        "id": f"notif_{int(time.time() * 1000)}_3",
+                        "message": "High energy consumption detected in Living Room",
+                        "device": "lamp",
+                        "level": "error",
+                        "timestamp": datetime.now(timezone.utc).isoformat(),
+                        "read": False
+                    },
+                    {
+                        "id": f"notif_{int(time.time() * 1000)}_4",
+                        "message": "Camera connection established",
+                        "device": None,
+                        "level": "info",
+                        "timestamp": datetime.now(timezone.utc).isoformat(),
+                        "read": True
+                    }
+                ]
+                
+                for notif in dummy_notifications:
+                    redis_client.lpush('voltguard:notifications', json.dumps(notif))
+                
+                print(f"[REDIS] Added {len(dummy_notifications)} dummy notifications")
+            else:
+                print(f"[REDIS] Found {existing_count} existing notifications, skipping dummy data")
+        except Exception as e:
+            print(f"[ERROR] Failed to add dummy notifications: {e}")
+        
+        asyncio.create_task(listen_for_notifications())
+
+@app.on_event("shutdown")
+def shutdown_event():
+    """Cleanup on shutdown"""
+    print("Shutting down VoltGuard Unified Server...")
+    from model.check import camera
+    if camera:
+        camera.release()
+    import cv2
+    cv2.destroyAllWindows()
+
+# --- 12. MAIN EXECUTION ---
 if __name__ == "__main__":
-    import sys
-    print("🚀 Starting Energy MCP Server on http://localhost:8000/mcp/sse", file=sys.stderr)
-    uvicorn.run(app, host="0.0.0.0", port=8000)
+    def signal_handler(sig, frame):
+        print("\nReceived termination signal. Shutting down gracefully...")
+        sys.exit(0)
+    
+    signal.signal(signal.SIGINT, signal_handler)
+    signal.signal(signal.SIGTERM, signal_handler)
+    
+    print("=" * 60)
+    print("🚀 VoltGuard Unified Server Starting")
+    print("=" * 60)
+    print("📹 Video API:     http://0.0.0.0:8000/api/*")
+    print("🔌 Socket.IO:     http://0.0.0.0:8000/socket.io/")
+    print("🤖 MCP Server:    http://0.0.0.0:8000/lou/mcp/sse")
+    print("📊 Notifications: http://0.0.0.0:8000/api/notifications")
+    print("=" * 60)
+    print("Press Ctrl+C to stop")
+    print()
+    
+    uvicorn.run(socket_app, host="0.0.0.0", port=8000, log_level="info")
