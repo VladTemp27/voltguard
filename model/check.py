@@ -69,6 +69,8 @@ def main_loop():
                     cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 0, 255), 2)
 
 
+        #could resize the frame later for faster streaming
+        encode_param = [int(cv2.IMWRITE_JPEG_QUALITY), 50]
         # Encode frame and yield for streaming
         ret, buffer = cv2.imencode('.jpg', frame)
         if ret:
